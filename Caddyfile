@@ -1,10 +1,10 @@
 # SelfDriveTrip Caddyfile
 # Routes:
-#   go.suv.life - Frontend (Vue/React SPA)
-#   goback.suv.life/api/* - Backend API
+#   trip.guofeng.me - Frontend (Vue/React SPA)
+#   api-trip.guofeng.me/api/* - Backend API
 
-# Backend API - goback.suv.life
-goback.suv.life {
+# Backend API - api-trip.guofeng.me
+api-trip.guofeng.me {
     reverse_proxy /api/* selfdrivetrip-backend:8000
     reverse_proxy /docs selfdrivetrip-backend:8000
     reverse_proxy /openapi.json selfdrivetrip-backend:8000
@@ -16,8 +16,8 @@ goback.suv.life {
     }
 }
 
-# Frontend - go.suv.life
-go.suv.life {
+# Frontend - trip.guofeng.me
+trip.guofeng.me {
     root * /var/www/selfdrivetrip/frontend
     file_server
     try_files {path} /index.html
