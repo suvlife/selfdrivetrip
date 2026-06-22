@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: selfdrivetrip-db
+    environment:
+      POSTGRES_USER: selfdrivetrip
+      POSTGRES_PASSWORD: Sdtrip2024Secure
+      POSTGRES_DB: selfdrivetrip
+    volumes:
+      - selfdrivetrip_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selfdrivetrip"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - opt_web
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: selfdrivetrip-backend
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - opt_web
+
+  frontend:
+    image: nginx:alpine
+    container_name: selfdrivetrip-frontend
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - opt_web
+    depends_on:
+      - backend
+
+volumes:
+  selfdrivetrip_postgres_data:
+
+networks:
+  opt_web:
+    external: true

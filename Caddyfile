@@ -1,0 +1,28 @@
+# SelfDriveTrip Caddyfile
+# Routes:
+#   go.suv.life - Frontend (Vue/React SPA)
+#   goback.suv.life/api/* - Backend API
+
+# Backend API - goback.suv.life
+goback.suv.life {
+    reverse_proxy /api/* selfdrivetrip-backend:8000
+    reverse_proxy /docs selfdrivetrip-backend:8000
+    reverse_proxy /openapi.json selfdrivetrip-backend:8000
+
+    header /api/* {
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization"
+    }
+}
+
+# Frontend - go.suv.life
+go.suv.life {
+    root * /var/www/selfdrivetrip/frontend
+    file_server
+    try_files {path} /index.html
+
+    header /assets/* {
+        Cache-Control "public, max-age=31536000, immutable"
+    }
+}
