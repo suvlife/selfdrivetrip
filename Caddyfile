@@ -1,28 +1,40 @@
-# SelfDriveTrip Caddyfile
-# Routes:
-#   trip.guofeng.me - Frontend (Vue/React SPA)
-#   api-trip.guofeng.me/api/* - Backend API
-
-# Backend API - api-trip.guofeng.me
-api-trip.guofeng.me {
-    reverse_proxy /api/* selfdrivetrip-backend:8000
-    reverse_proxy /docs selfdrivetrip-backend:8000
-    reverse_proxy /openapi.json selfdrivetrip-backend:8000
-
-    header /api/* {
-        Access-Control-Allow-Origin *
-        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-        Access-Control-Allow-Headers "Content-Type, Authorization"
-    }
+{
+  email chengguofeng@icloud.com
+  acme_dns cloudflare {env.CF_API_TOKEN}
 }
 
-# Frontend - trip.guofeng.me
-trip.guofeng.me {
-    root * /var/www/selfdrivetrip/frontend
-    file_server
-    try_files {path} /index.html
+blog.guofeng.me {
+  reverse_proxy /ghost ghost:2368
+  reverse_proxy /ghost/* ghost:2368
+  handle_path /_webhook/* {
+    reverse_proxy 172.18.0.1:3456
+  }
+  root * /var/www/blog
+  file_server
+  @needsHtml {
+    not path /
+    not path /ghost
+    not path /ghost/*
+    not path /_webhook
+    not path /_webhook/*
+    not path *.html *.css *.js *.json *.png *.jpg *.jpeg *.gif *.svg *.ico *.woff *.woff2 *.ttf *.eot
+  }
+  map {path} {path_clean} {
+    ~^(.*)/$ $1
+    default {path}
+  }
+  rewrite @needsHtml {path_clean}.html
+}
 
-    header /assets/* {
-        Cache-Control "public, max-age=31536000, immutable"
-    }
+code.guofeng.me { reverse_proxy code-server:8443 }
+tongji.guofeng.me { reverse_proxy umami:3000 }
+it.guofeng.me { reverse_proxy it-tools:80 }
+api.learnclub.ai { reverse_proxy new-api:3000 }
+
+# SelfDriveTrip - API + frontend same domain
+trip.guofeng.me {
+  reverse_proxy /api/* selfdrivetrip-backend:8000
+  reverse_proxy /docs selfdrivetrip-backend:8000
+  reverse_proxy /openapi.json selfdrivetrip-backend:8000
+  reverse_proxy selfdrivetrip-frontend:80
 }
