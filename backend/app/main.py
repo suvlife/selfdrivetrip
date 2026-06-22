@@ -92,7 +92,7 @@ async def poi_search(
     types: str = Query(None, description="POI type filter"),
     page: int = Query(1, ge=1),
 ):
-    """Search Points of Interest via AMap."""
+    """Search Points of Interest via Baidu Maps API."""
     results = await search_poi(city, keyword, types, page)
     return {"city": city, "keyword": keyword, "results": results}
 

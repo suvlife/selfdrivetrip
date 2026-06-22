@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     AI_API_BASE_URL: str = "https://api.learnclub.ai/v1"
     AI_MODEL: str = "deepseek-chat"
 
-    # Amap (高德地图)
-    AMAP_KEY: str = ""
+    # Baidu Maps (百度地图)
+    BAIDU_MAP_AK: str = ""
 
     # Unsplash
     UNSPLASH_ACCESS_KEY: str = ""

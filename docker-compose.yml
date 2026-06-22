@@ -6,7 +6,7 @@ services:
     container_name: selfdrivetrip-db
     environment:
       POSTGRES_USER: selfdrivetrip
-      POSTGRES_PASSWORD: Sdtrip2024Secure
+      POSTGRES_PASSWORD: Sdtrip2024@Secure!
       POSTGRES_DB: selfdrivetrip
     volumes:
       - selfdrivetrip_postgres_data:/var/lib/postgresql/data

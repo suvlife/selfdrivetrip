@@ -1,35 +1,38 @@
-let AMapLoader = null
+let bmapLoading = null
 
-const AMAP_KEY = import.meta.env.VITE_AMAP_KEY || ''
+const BAIDU_MAP_AK = import.meta.env.VITE_BAIDU_MAP_AK || ''
 
-export function hasAMapKey() {
-  return !!AMAP_KEY && AMAP_KEY !== 'your_amap_key_here'
+export function hasBMapKey() {
+  return !!BAIDU_MAP_AK && BAIDU_MAP_AK !== 'your_baidu_map_ak_here'
 }
 
-export async function loadAMap() {
-  if (!hasAMapKey()) {
-    throw new Error('AMap API key not configured. Set VITE_AMAP_KEY in .env')
-  }
-  if (AMapLoader) return AMapLoader
+export function loadBMap() {
+  if (typeof BMap !== 'undefined') return Promise.resolve(BMap)
+  if (bmapLoading) return bmapLoading
 
-  try {
-    const loader = await import('@amap/amap-jsapi-loader')
-    AMapLoader = await loader.default.load({
-      key: AMAP_KEY,
-      version: import.meta.env.VITE_AMAP_VERSION || '2.0',
-      plugins: [
-        'AMap.PlaceSearch',
-        'AMap.AutoComplete',
-        'AMap.Geolocation',
-        'AMap.Driving',
-        'AMap.Weather',
-      ],
-    })
-    return AMapLoader
-  } catch (err) {
-    console.error('AMap load failed:', err)
-    throw err
+  if (!hasBMapKey()) {
+    return Promise.reject(new Error('Baidu Maps API key not configured. Set VITE_BAIDU_MAP_AK in .env'))
   }
+
+  bmapLoading = new Promise((resolve, reject) => {
+    const callbackName = '__baidu_map_callback_' + Date.now()
+    window[callbackName] = () => {
+      delete window[callbackName]
+      resolve(BMap)
+    }
+
+    const script = document.createElement('script')
+    script.src = `https://api.map.baidu.com/api?v=3.0&ak=${BAIDU_MAP_AK}&callback=${callbackName}`
+    script.async = true
+    script.onerror = () => {
+      delete window[callbackName]
+      bmapLoading = null
+      reject(new Error('Baidu Maps JSAPI script failed to load'))
+    }
+    document.head.appendChild(script)
+  })
+
+  return bmapLoading
 }
 
 // Day colors for polylines
@@ -125,12 +128,21 @@ export function createInfoWindowContent(poi) {
   `
 }
 
-// Decode coordinates from backend format
+// Decode coordinates from backend format — returns [lng, lat]
 export function parseLngLat(coord) {
   if (!coord) return null
   if (Array.isArray(coord)) return coord
   if (typeof coord === 'object' && coord.lng !== undefined && coord.lat !== undefined) {
     return [coord.lng, coord.lat]
+  }
+  return null
+}
+
+// Helper to create a BMap.Point from [lng, lat]
+export function toBPoint(lnglat) {
+  if (!lnglat) return null
+  if (Array.isArray(lnglat) && lnglat.length >= 2) {
+    return new BMap.Point(lnglat[0], lnglat[1])
   }
   return null
 }

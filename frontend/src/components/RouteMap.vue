@@ -1,6 +1,6 @@
 <template>
   <div class="route-map relative w-full" :style="{ height: height }">
-    <!-- AMap container -->
+    <!-- Map container -->
     <div
       ref="mapContainer"
       class="w-full h-full rounded-xl overflow-hidden"
@@ -14,7 +14,7 @@
         </div>
       </div>
 
-      <!-- Placeholder when no AMap key -->
+      <!-- Placeholder when no Baidu Maps key -->
       <div v-if="!hasKey" class="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
         <div class="text-center max-w-md px-6">
           <span class="text-6xl">🗺️</span>
@@ -33,7 +33,7 @@
             </div>
           </div>
           <p class="mt-3 text-xs text-gray-400">
-            配置 VITE_AMAP_KEY 以启用高德地图
+            配置 VITE_BAIDU_MAP_AK 以启用百度地图
           </p>
         </div>
       </div>
@@ -111,7 +111,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
-import { hasAMapKey, loadAMap, DAY_COLORS, createMarkerContent,
+import { hasBMapKey, loadBMap, DAY_COLORS, createMarkerContent,
   createStartMarkerContent, createEndMarkerContent, createInfoWindowContent } from '@/utils/map'
 import POICard from './POICard.vue'
 
@@ -128,12 +128,11 @@ const destination = computed(() => props.route?.destination || props.route?.end_
 const totalDistance = computed(() => props.route?.total_distance || props.route?.distance || '')
 const totalDuration = computed(() => props.route?.total_duration || props.route?.duration || '')
 
-const hasKey = hasAMapKey()
+const hasKey = hasBMapKey()
 const mapContainer = ref(null)
 const mapLoaded = ref(false)
 let map = null
-let polylines = []
-let markers = []
+let overlays = []  // track all overlays (polylines + markers)
 let infoWindow = null
 
 const activeDay = ref(-1)
@@ -163,7 +162,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   if (map) {
-    map.destroy()
+    map.clearOverlays()
+    overlays = []
     map = null
   }
 })
@@ -176,16 +176,15 @@ watch(() => props.route, (newRoute) => {
 
 async function initMap() {
   try {
-    const AMap = await loadAMap()
+    const BMap = await loadBMap()
     if (!mapContainer.value) return
 
-    map = new AMap.Map(mapContainer.value, {
-      zoom: 5,
-      center: [104.0, 35.0],
-      mapStyle: 'amap://styles/light',
-      layers: [new AMap.TileLayer.Satellite()],
-      resizeEnable: true,
-    })
+    map = new BMap.Map(mapContainer.value)
+    const center = new BMap.Point(104.0, 35.0)
+    map.centerAndZoom(center, 5)
+    // Enable map controls
+    map.enableScrollWheelZoom()
+    map.enableDragging()
 
     mapLoaded.value = true
 
@@ -201,8 +200,8 @@ function renderRoute(route) {
   if (!map || !route) return
   clearMap()
 
-  const AMap = window.AMap
-  if (!AMap) return
+  const BMap = window.BMap
+  if (!BMap) return
 
   const allPoints = []
   const daysData = route.days || []
@@ -214,77 +213,72 @@ function renderRoute(route) {
 
     segments.forEach((seg, segIdx) => {
       if (seg.coordinates && seg.coordinates.length >= 2) {
-        path.push([seg.coordinates[0], seg.coordinates[1]])
-        allPoints.push([seg.coordinates[0], seg.coordinates[1]])
+        const pt = new BMap.Point(seg.coordinates[0], seg.coordinates[1])
+        path.push(pt)
+        allPoints.push(pt)
       }
     })
 
     if (path.length >= 2) {
-      const polyline = new AMap.Polyline({
-        path,
+      const polyline = new BMap.Polyline(path, {
         strokeColor: color,
         strokeWeight: activeDay.value === -1 || activeDay.value === dayIdx ? 6 : 2,
         strokeOpacity: activeDay.value === -1 || activeDay.value === dayIdx ? 0.9 : 0.2,
-        strokeStyle: 'solid',
-        lineJoin: 'round',
-        lineCap: 'round',
-        zIndex: activeDay.value === dayIdx ? 100 : 50,
-        extData: { dayIdx },
       })
-      polyline.on('click', () => {
+      polyline._dayIdx = dayIdx
+
+      polyline.addEventListener('click', () => {
         activeDay.value = dayIdx
       })
-      polyline.setMap(map)
-      polylines.push(polyline)
 
-      // Distance label on middle segment
+      map.addOverlay(polyline)
+      overlays.push(polyline)
+
+      // Distance label on middle segment (using a marker with content)
       if (segments.length > 0) {
         const midSeg = segments[Math.floor(segments.length / 2)]
         if (midSeg.coordinates && midSeg.coordinates.length >= 2) {
-          const label = new AMap.Text({
-            text: `${midSeg.distance || ''}${midSeg.duration ? ` · ${midSeg.duration}` : ''}`,
-            position: [midSeg.coordinates[0], midSeg.coordinates[1]],
-            offset: new AMap.Pixel(0, -10),
-            style: {
-              'background-color': 'rgba(255,255,255,0.9)',
-              'border': '1px solid #e8e8e8',
-              'border-radius': '4px',
-              'padding': '2px 6px',
-              'font-size': '11px',
-              'color': '#666',
-              'white-space': 'nowrap',
-            },
-          })
-          label.setMap(map)
-          markers.push(label)
+          const midPt = new BMap.Point(midSeg.coordinates[0], midSeg.coordinates[1])
+          const labelText = `${midSeg.distance || ''}${midSeg.duration ? ` · ${midSeg.duration}` : ''}`
+          const labelMarker = new BMap.Marker(midPt)
+          labelMarker.setContent(`<div style="
+            background-color: rgba(255,255,255,0.9);
+            border: 1px solid #e8e8e8;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: #666;
+            white-space: nowrap;
+          ">${labelText}</div>`)
+          // Disable label interactivity
+          labelMarker.disableDragging()
+          labelMarker.addEventListener('click', (e) => { e.stopPropagation && e.stopPropagation() })
+          map.addOverlay(labelMarker)
+          overlays.push(labelMarker)
         }
       }
     }
 
     // Start marker
     if (dayIdx === 0 && segments.length > 0 && segments[0].coordinates) {
-      const startMarker = new AMap.Marker({
-        position: [segments[0].coordinates[0], segments[0].coordinates[1]],
-        content: createStartMarkerContent(),
-        offset: new AMap.Pixel(-20, -20),
-        zIndex: 200,
-      })
-      startMarker.setMap(map)
-      markers.push(startMarker)
+      const startPt = new BMap.Point(segments[0].coordinates[0], segments[0].coordinates[1])
+      const startMarker = new BMap.Marker(startPt)
+      startMarker.setContent(createStartMarkerContent())
+      startMarker.setZIndex(200)
+      map.addOverlay(startMarker)
+      overlays.push(startMarker)
     }
 
     // End marker
     if (dayIdx === daysData.length - 1 && segments.length > 0) {
       const lastSeg = segments[segments.length - 1]
       if (lastSeg.coordinates) {
-        const endMarker = new AMap.Marker({
-          position: [lastSeg.coordinates[0], lastSeg.coordinates[1]],
-          content: createEndMarkerContent(),
-          offset: new AMap.Pixel(-15, -20),
-          zIndex: 200,
-        })
-        endMarker.setMap(map)
-        markers.push(endMarker)
+        const endPt = new BMap.Point(lastSeg.coordinates[0], lastSeg.coordinates[1])
+        const endMarker = new BMap.Marker(endPt)
+        endMarker.setContent(createEndMarkerContent())
+        endMarker.setZIndex(200)
+        map.addOverlay(endMarker)
+        overlays.push(endMarker)
       }
     }
 
@@ -296,37 +290,34 @@ function renderRoute(route) {
       const lat = poi.coordinates?.[1] || poi.lat
       if (!lng || !lat) return
 
-      const marker = new AMap.Marker({
-        position: [lng, lat],
-        content: createMarkerContent(poi),
-        offset: new AMap.Pixel(-16, -16),
-        zIndex: 150,
-        extData: { poi, dayIdx },
-      })
+      const poiPt = new BMap.Point(lng, lat)
+      const marker = new BMap.Marker(poiPt)
+      marker.setContent(createMarkerContent(poi))
+      marker.setZIndex(150)
+      marker._poi = poi
+      marker._dayIdx = dayIdx
 
-      marker.on('click', () => {
+      marker.addEventListener('click', () => {
         selectedPOI.value = poi
         if (!isMobile.value && infoWindow) {
           infoWindow.setContent(createInfoWindowContent(poi))
-          infoWindow.open(map, [lng, lat])
+          infoWindow.open(map, poiPt)
         }
       })
 
-      marker.setMap(map)
-      markers.push(marker)
+      map.addOverlay(marker)
+      overlays.push(marker)
     })
   })
 
   if (allPoints.length >= 2) {
-    map.setFitView(null, false, [40, 40, 40, 40])
+    map.setViewport(allPoints, { margins: [40, 40, 40, 40] })
   }
 }
 
 function clearMap() {
-  polylines.forEach(p => p.setMap(null))
-  markers.forEach(m => m.setMap(null))
-  polylines = []
-  markers = []
+  overlays.forEach(o => map.removeOverlay(o))
+  overlays = []
   if (infoWindow) {
     infoWindow.close()
   }
@@ -335,27 +326,25 @@ function clearMap() {
 function toggleDay(idx) {
   activeDay.value = activeDay.value === idx ? -1 : idx
 
-  polylines.forEach(poly => {
-    const dayIdx = poly.getExtData()?.dayIdx
-    if (activeDay.value === -1) {
-      poly.setOptions({ strokeWeight: 6, strokeOpacity: 0.9 })
-    } else if (dayIdx === activeDay.value) {
-      poly.setOptions({ strokeWeight: 8, strokeOpacity: 1, zIndex: 100 })
-    } else {
-      poly.setOptions({ strokeWeight: 2, strokeOpacity: 0.2, zIndex: 50 })
+  overlays.forEach(o => {
+    if (o._dayIdx !== undefined) {
+      const isActive = activeDay.value === -1 || o._dayIdx === activeDay.value
+      if (typeof o.setStrokeWeight === 'function') {
+        o.setStrokeWeight(isActive ? 6 : 2)
+        o.setStrokeOpacity(isActive ? 0.9 : 0.2)
+      }
     }
   })
 
   if (activeDay.value !== -1 && days.value[activeDay.value]) {
     const day = days.value[activeDay.value]
     const points = []
+    const BMap = window.BMap
     ;(day.segments || []).forEach(seg => {
-      if (seg.coordinates) points.push([seg.coordinates[0], seg.coordinates[1]])
+      if (seg.coordinates) points.push(new BMap.Point(seg.coordinates[0], seg.coordinates[1]))
     })
-    const bounds = new window.AMap.Bounds()
-    points.forEach(p => bounds.extend(p))
     if (points.length > 0) {
-      map.setBounds(bounds, false, [60, 60, 60, 60])
+      map.setViewport(points, { margins: [60, 60, 60, 60] })
     }
   } else {
     fitBounds()
@@ -363,8 +352,17 @@ function toggleDay(idx) {
 }
 
 function fitBounds() {
-  if (map && polylines.length > 0) {
-    map.setFitView(null, false, [40, 40, 40, 40])
+  if (map) {
+    const pts = []
+    overlays.forEach(o => {
+      if (o.getPosition && typeof o.getPosition === 'function') {
+        const pos = o.getPosition()
+        if (pos) pts.push(pos)
+      }
+    })
+    if (pts.length >= 2) {
+      map.setViewport(pts, { margins: [40, 40, 40, 40] })
+    }
   }
 }
 
